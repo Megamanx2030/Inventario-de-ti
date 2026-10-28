@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventário de TI</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #fff; --text: #1d2733; --muted: #66727f; --line: #dde3ea;
+    --brand: #1f3a5f; --brand-2: #2d5a8e; --danger: #c0392b;
+    --uso: #1e7e46; --estoque: #2d5a8e; --manut: #b7791f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11161c; --card: #1a2129; --text: #e6ebf0; --muted: #94a0ad; --line: #2b3540;
+      --brand: #4f86c6; --brand-2: #6b9fd8; --danger: #e5675a;
+      --uso: #4cc282; --estoque: #6b9fd8; --manut: #e0a84a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--brand); color: #fff; padding: 14px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 19px; flex: 1; }
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 8px 14px; }
+  button.primario { background: var(--brand-2); color: #fff; border-color: transparent; }
+  header button { background: rgba(255,255,255,.15); color: #fff; border-color: rgba(255,255,255,.3); }
+  header button.primario { background: #fff; color: #1f3a5f; }
+  button.perigo { color: var(--danger); }
+  input, select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); width: 100%; }
+  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .resumo div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .resumo b { display: block; font-size: 22px; }
+  .resumo span { color: var(--muted); font-size: 13px; }
+  .filtros { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  @media (max-width: 700px) { .filtros { grid-template-columns: 1fr 1fr; } .filtros .busca { grid-column: 1 / -1; } }
+  .tabela { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 1100px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--card); }
+  tbody tr:hover { background: color-mix(in srgb, var(--brand-2) 7%, transparent); }
+  td.acoes { text-align: right; }
+  td.acoes button { padding: 4px 10px; font-size: 13px; }
+  .selo { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
+  .selo.uso { color: var(--uso); } .selo.estoque { color: var(--estoque); } .selo.manut { color: var(--manut); }
+  .vazio { padding: 30px; text-align: center; color: var(--muted); }
+  .aviso { background: color-mix(in srgb, var(--manut) 15%, var(--card)); border: 1px solid var(--manut); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; font-size: 14px; }
+  dialog { border: none; border-radius: 12px; padding: 0; width: min(720px, calc(100vw - 32px)); background: var(--card); color: var(--text); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog form { padding: 18px; }
+  dialog h2 { margin: 0 0 14px; font-size: 18px; }
+  .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .grade { grid-template-columns: 1fr; } }
+  label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  .rodape { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Inventário de TI</h1>
+  <button id="btnCsv" type="button">Exportar CSV</button>
+  <button id="btnRecarregar" type="button">Atualizar</button>
+  <button id="btnNovo" class="primario" type="button">+ Novo equipamento</button>
+</header>
+
+<main>
+  <div id="aviso" class="aviso" hidden></div>
+
+  <section class="resumo" id="resumo"></section>
+
+  <section class="filtros">
+    <input class="busca" id="fBusca" type="search" placeholder="Buscar por nome, série, usuário, setor...">
+    <select id="fTipo"><option value="">Todos os tipos</option></select>
+    <select id="fStatus"><option value="">Todos os status</option></select>
+    <select id="fEmpresa"><option value="">Todas as empresas</option></select>
+  </section>
+
+  <section class="tabela">
+    <table>
+      <thead><tr id="cabecalho"></tr></thead>
+      <tbody id="linhas"></tbody>
+    </table>
+    <div id="vazio" class="vazio" hidden>Nenhum equipamento encontrado.</div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form id="form" method="dialog">
+    <h2 id="dlgTitulo">Novo equipamento</h2>
+    <div class="grade" id="campos"></div>
+    <div class="rodape">
+      <button type="button" id="btnCancelar">Cancelar</button>
+      <button type="submit" class="primario" id="btnSalvar">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+// ===== CONFIGURAÇÃO (só para hospedar fora do Google, ex.: Vercel) =====
+// Cole aqui a URL do Web App do Apps Script (termina em /exec).
+// Deixe vazio para testar: os dados ficam só neste navegador.
+const API_URL = '';
+// ======================================================================
+
+const TIPOS = ['Notebook', 'Desktop', 'Monitor'];
+const STATUS = ['Em Uso', 'Em Estoque', 'Manutenção'];
+const CAMPOS = [
+  { id: 'nome', rotulo: 'Nome da Máquina', obrigatorio: true },
+  { id: 'tipo', rotulo: 'Tipo', opcoes: TIPOS, obrigatorio: true },
+  { id: 'serie', rotulo: 'Número de Série' },
+  { id: 'empresa', rotulo: 'Empresa' },
+  { id: 'usuario', rotulo: 'Usuário' },
+  { id: 'setor', rotulo: 'Setor' },
+  { id: 'processador', rotulo: 'Processador' },
+  { id: 'ram', rotulo: 'Memória RAM' },
+  { id: 'armazenamento', rotulo: 'Armazenamento' },
+  { id: 'status', rotulo: 'Status', opcoes: STATUS, obrigatorio: true },
+];
+
+const noGoogle = typeof google !== 'undefined' && google.script && google.script.run;
+const modoLocal = !noGoogle && !API_URL;
+const $ = (id) => document.getElementById(id);
+let itens = [];
+let editandoId = null;
+let ordem = { campo: 'nome', asc: true };
+
+// ---------- Backend ----------
+function lerLocal(chave, padrao) {
+  try { return JSON.parse(localStorage.getItem(chave)) ?? padrao; } catch (e) { return padrao; }
+}
+function gravarLocal(chave, valor) {
+  try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (e) {}
+}
+
+async function chamar(pedido) {
+  pedido.chave = lerLocal('inventario.chave', '');
+  let r;
+  if (noGoogle) {
+    r = await new Promise((ok, falha) =>
+      google.script.run.withSuccessHandler(ok).withFailureHandler(falha).api(pedido));
+  } else if (API_URL) {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(pedido),
+    });
+    r = await resp.json();
+  } else {
+    r = chamarLocal(pedido);
+  }
+  if (!r.ok && r.precisaChave) {
+    const chave = prompt('Digite a chave de acesso do inventário:');
+    if (chave) { gravarLocal('inventario.chave', chave); return chamar(pedido); }
+  }
+  if (!r.ok) throw new Error(r.erro || 'Erro desconhecido');
+  return r;
+}
+
+function chamarLocal(p) {
+  const lista = lerLocal('inventario.itens', []);
+  if (p.acao === 'listar') return { ok: true, itens: lista };
+  if (p.acao === 'excluir') {
+    gravarLocal('inventario.itens', lista.filter((x) => x.id !== p.id));
+    return { ok: true };
+  }
+  if (p.acao === 'salvar') {
+    const item = { ...p.item };
+    if (item.serie && lista.some((x) => x.id !== item.id && x.serie.toLowerCase() === item.serie.toLowerCase())) {
+      return { ok: false, erro: 'Número de série já cadastrado' };
+    }
+    item.atualizadoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    if (item.id) {
+      const i = lista.findIndex((x) => x.id === item.id);
+      lista[i] = item;
+    } else {
+      item.id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+      lista.push(item);
+    }
+    gravarLocal('inventario.itens', lista);
+    return { ok: true, item };
+  }
+  return { ok: false, erro: 'Ação desconhecida' };
+}
+
+// ---------- Tela ----------
+function aviso(msg) {
+  $('aviso').hidden = !msg;
+  $('aviso').innerHTML = msg || '';
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function classeStatus(s) {
+  return s === 'Em Uso' ? 'uso' : s === 'Em Estoque' ? 'estoque' : 'manut';
+}
+
+function montarEstrutura() {
+  TIPOS.forEach((t) => $('fTipo').add(new Option(t, t)));
+  STATUS.forEach((s) => $('fStatus').add(new Option(s, s)));
+
+  $('cabecalho').innerHTML = CAMPOS.map((c) => `<th data-campo="${c.id}">${c.rotulo}</th>`).join('') + '<th></th>';
+  $('cabecalho').addEventListener('click', (e) => {
+    const campo = e.target.dataset.campo;
+    if (!campo) return;
+    ordem = { campo, asc: ordem.campo === campo ? !ordem.asc : true };
+    desenhar();
+  });
+
+  $('campos').innerHTML = CAMPOS.map((c) => {
+    const req = c.obrigatorio ? ' required' : '';
+    const ctl = c.opcoes
+      ? `<select name="${c.id}"${req}>${c.opcoes.map((o) => `<option>${o}</option>`).join('')}</select>`
+      : `<input name="${c.id}" maxlength="200"${req}>`;
+    return `<label>${c.rotulo}${c.obrigatorio ? ' *' : ''}${ctl}</label>`;
+  }).join('');
+}
+
+function filtrados() {
+  const busca = $('fBusca').value.trim().toLowerCase();
+  const tipo = $('fTipo').value, status = $('fStatus').value, empresa = $('fEmpresa').value;
+  return itens
+    .filter((x) => (!tipo || x.tipo === tipo) && (!status || x.status === status) && (!empresa || x.empresa === empresa))
+    .filter((x) => !busca || CAMPOS.some((c) => String(x[c.id] || '').toLowerCase().includes(busca)))
+    .sort((a, b) => {
+      const r = String(a[ordem.campo] || '').localeCompare(String(b[ordem.campo] || ''), 'pt-BR', { numeric: true });
+      return ordem.asc ? r : -r;
+    });
+}
+
+function desenhar() {
+  const conta = (f) => itens.filter(f).length;
+  $('resumo').innerHTML = [
+    ['Total', itens.length],
+    ...STATUS.map((s) => [s, conta((x) => x.status === s)]),
+    ...TIPOS.map((t) => [t === 'Monitor' ? 'Monitores' : t + 's', conta((x) => x.tipo === t)]),
+  ].map(([r, n]) => `<div><b>${n}</b><span>${r}</span></div>`).join('');
+
+  const empresaAtual = $('fEmpresa').value;
+  const empresas = [...new Set(itens.map((x) => x.empresa).filter(Boolean))].sort();
+  $('fEmpresa').innerHTML = '<option value="">Todas as empresas</option>' +
+    empresas.map((e) => `<option${e === empresaAtual ? ' selected' : ''}>${esc(e)}</option>`).join('');
+
+  const lista = filtrados();
+  $('vazio').hidden = lista.length > 0;
+  $('linhas').innerHTML = lista.map((x) => '<tr>' + CAMPOS.map((c) => {
+    if (c.id === 'status') return `<td><span class="selo ${classeStatus(x.status)}">${esc(x.status)}</span></td>`;
+    if (c.id === 'nome') return `<td><b>${esc(x.nome)}</b></td>`;
+    return `<td>${esc(x[c.id])}</td>`;
+  }).join('') + `<td class="acoes"><button data-editar="${esc(x.id)}">Editar</button> <button class="perigo" data-excluir="${esc(x.id)}">Excluir</button></td></tr>`).join('');
+
+  document.querySelectorAll('th[data-campo]').forEach((th) => {
+    const c = CAMPOS.find((k) => k.id === th.dataset.campo);
+    th.textContent = c.rotulo + (ordem.campo === c.id ? (ordem.asc ? ' ▲' : ' ▼') : '');
+  });
+}
+
+async function carregar() {
+  try {
+    $('btnRecarregar').disabled = true;
+    const r = await chamar({ acao: 'listar' });
+    itens = r.itens;
+    desenhar();
+  } catch (e) {
+    aviso('Não foi possível carregar o inventário: ' + esc(e.message));
+  } finally {
+    $('btnRecarregar').disabled = false;
+  }
+}
+
+function abrir(item) {
+  editandoId = item ? item.id : null;
+  $('dlgTitulo').textContent = item ? 'Editar equipamento' : 'Novo equipamento';
+  const f = $('form');
+  CAMPOS.forEach((c) => { f.elements[c.id].value = item ? (item[c.id] || '') : (c.opcoes ? c.opcoes[0] : ''); });
+  if (!item) f.elements.status.value = 'Em Estoque';
+  $('dlg').showModal();
+  f.elements.nome.focus();
+}
+
+async function salvar(e) {
+  e.preventDefault();
+  const f = $('form');
+  const item = { id: editandoId || '' };
+  CAMPOS.forEach((c) => { item[c.id] = f.elements[c.id].value.trim(); });
+  $('btnSalvar').disabled = true;
+  try {
+    const r = await chamar({ acao: 'salvar', item });
+    const i = itens.findIndex((x) => x.id === r.item.id);
+    if (i >= 0) itens[i] = r.item; else itens.push(r.item);
+    $('dlg').close();
+    desenhar();
+    toast('Salvo!');
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    $('btnSalvar').disabled = false;
+  }
+}
+
+async function excluir(id) {
+  const item = itens.find((x) => x.id === id);
+  if (!item || !confirm(`Excluir "${item.nome}"?`)) return;
+  try {
+    await chamar({ acao: 'excluir', id });
+    itens = itens.filter((x) => x.id !== id);
+    desenhar();
+    toast('Excluído.');
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function exportarCsv() {
+  const cols = [...CAMPOS.map((c) => [c.id, c.rotulo]), ['atualizadoEm', 'Atualizado em']];
+  const cel = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [cols.map((c) => cel(c[1])).join(';'),
+    ...filtrados().map((x) => cols.map((c) => cel(x[c[0]])).join(';'))].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'inventario-ti.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+montarEstrutura();
+$('btnNovo').onclick = () => abrir(null);
+$('btnCancelar').onclick = () => $('dlg').close();
+$('btnRecarregar').onclick = carregar;
+$('btnCsv').onclick = exportarCsv;
+$('form').addEventListener('submit', salvar);
+['fBusca', 'fTipo', 'fStatus', 'fEmpresa'].forEach((id) => $(id).addEventListener('input', desenhar));
+$('linhas').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.editar) abrir(itens.find((x) => x.id === b.dataset.editar));
+  if (b.dataset.excluir) excluir(b.dataset.excluir);
+});
+if (modoLocal) {
+  aviso('<b>Modo de teste:</b> os dados estão salvos só neste navegador. Para salvar na planilha do Google, configure a <code>API_URL</code> no <code>index.html</code> (veja o README).');
+}
+carregar();
+</script>
+</body>
+</html>
